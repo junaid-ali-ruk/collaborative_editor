@@ -7,10 +7,12 @@ import { redirect } from "next/navigation";
 const Document = async ({ params: { id } }: SearchParamProps) => {
   const clerkUser = await currentUser();
   if(!clerkUser) redirect('/sign-in');
+  const email = clerkUser.emailAddresses[0]?.emailAddress;
+  if (!email) redirect('/sign-in');
 
   const room = await getDocument({
     roomId: id,
-    userId: clerkUser.emailAddresses[0].emailAddress,
+    userId: email,
   });
 
   if(!room) redirect('/');
@@ -25,7 +27,7 @@ const Document = async ({ params: { id } }: SearchParamProps) => {
       : 'viewer'
   }))
 
-  const currentUserType = room.usersAccesses[clerkUser.emailAddresses[0].emailAddress]?.includes('room:write') ? 'editor' : 'viewer';
+  const currentUserType = room.usersAccesses[email]?.includes('room:write') ? 'editor' : 'viewer';
 
   return (
     <main className="flex w-full flex-col items-center">

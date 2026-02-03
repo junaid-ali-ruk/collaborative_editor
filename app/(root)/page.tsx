@@ -15,7 +15,11 @@ const Home = async () => {
   const clerkUser = await currentUser();
   if(!clerkUser) redirect('/sign-in');
 
-  const roomDocuments = await getDocuments(clerkUser.emailAddresses[0].emailAddress);
+  const email = clerkUser.emailAddresses[0]?.emailAddress;
+
+  if (!email) redirect('/sign-in');
+
+  const roomDocuments = await getDocuments(email);
 
   return (
     <main className="home-container">
@@ -34,7 +38,7 @@ const Home = async () => {
             <h3 className="text-28-semibold">All documents</h3>
             <AddDocumentBtn 
               userId={clerkUser.id}
-              email={clerkUser.emailAddresses[0].emailAddress}
+              email={email}
             />
           </div>
           <ul className="document-ul">
@@ -71,7 +75,7 @@ const Home = async () => {
 
           <AddDocumentBtn 
             userId={clerkUser.id}
-            email={clerkUser.emailAddresses[0].emailAddress}
+              email={email}
           />
         </div>
       )}

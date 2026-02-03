@@ -5,11 +5,28 @@ import { liveblocks } from '../liveblocks';
 import { revalidatePath } from 'next/cache';
 import { getAccessType, parseStringify } from '../utils';
 import { redirect } from 'next/navigation';
+import { currentUser } from '@clerk/nextjs/server';
+
+const getCurrentUserEmail = async () => {
+  const clerkUser = await currentUser();
+
+  if (!clerkUser) {
+    return null;
+  }
+
+  return clerkUser.emailAddresses[0]?.emailAddress ?? null;
+};
 
 export const createDocument = async ({ userId, email }: CreateDocumentParams) => {
   const roomId = nanoid();
 
   try {
+    const currentEmail = await getCurrentUserEmail();
+
+    if (!currentEmail || currentEmail !== email) {
+      throw new Error('Unauthorized to create document');
+    }
+
     const metadata = {
       creatorId: userId,
       email,
@@ -36,6 +53,12 @@ export const createDocument = async ({ userId, email }: CreateDocumentParams) =>
 
 export const getDocument = async ({ roomId, userId }: { roomId: string; userId: string }) => {
   try {
+      const currentEmail = await getCurrentUserEmail();
+
+      if (!currentEmail || currentEmail !== userId) {
+        throw new Error('Unauthorized to access this document');
+      }
+
       const room = await liveblocks.getRoom(roomId);
     
       const hasAccess = Object.keys(room.usersAccesses).includes(userId);
@@ -52,6 +75,19 @@ export const getDocument = async ({ roomId, userId }: { roomId: string; userId: 
 
 export const updateDocument = async (roomId: string, title: string) => {
   try {
+    const currentEmail = await getCurrentUserEmail();
+
+    if (!currentEmail) {
+      throw new Error('Unauthorized to update document');
+    }
+
+    const room = await liveblocks.getRoom(roomId);
+    const access = room.usersAccesses[currentEmail] ?? [];
+
+    if (!access.includes('room:write')) {
+      throw new Error('Insufficient permissions to update document');
+    }
+
     const updatedRoom = await liveblocks.updateRoom(roomId, {
       metadata: {
         title
@@ -68,6 +104,12 @@ export const updateDocument = async (roomId: string, title: string) => {
 
 export const getDocuments = async (email: string ) => {
   try {
+      const currentEmail = await getCurrentUserEmail();
+
+      if (!currentEmail || currentEmail !== email) {
+        throw new Error('Unauthorized to list documents');
+      }
+
       const rooms = await liveblocks.getRooms({ userId: email });
     
       return parseStringify(rooms);
@@ -78,15 +120,28 @@ export const getDocuments = async (email: string ) => {
 
 export const updateDocumentAccess = async ({ roomId, email, userType, updatedBy }: ShareDocumentParams) => {
   try {
+    const currentEmail = await getCurrentUserEmail();
+
+    if (!currentEmail) {
+      throw new Error('Unauthorized to update document access');
+    }
+
+    const room = await liveblocks.getRoom(roomId);
+    const access = room.usersAccesses[currentEmail] ?? [];
+
+    if (!access.includes('room:write')) {
+      throw new Error('Insufficient permissions to update document access');
+    }
+
     const usersAccesses: RoomAccesses = {
       [email]: getAccessType(userType) as AccessType,
     }
 
-    const room = await liveblocks.updateRoom(roomId, { 
+    const updatedRoom = await liveblocks.updateRoom(roomId, { 
       usersAccesses
     })
 
-    if(room) {
+    if(updatedRoom) {
       const notificationId = nanoid();
 
       await liveblocks.triggerInboxNotification({
@@ -105,7 +160,7 @@ export const updateDocumentAccess = async ({ roomId, email, userType, updatedBy 
     }
 
     revalidatePath(`/documents/${roomId}`);
-    return parseStringify(room);
+    return parseStringify(updatedRoom);
   } catch (error) {
     console.log(`Error happened while updating a room access: ${error}`);
   }
@@ -113,7 +168,18 @@ export const updateDocumentAccess = async ({ roomId, email, userType, updatedBy 
 
 export const removeCollaborator = async ({ roomId, email }: {roomId: string, email: string}) => {
   try {
+    const currentEmail = await getCurrentUserEmail();
+
+    if (!currentEmail) {
+      throw new Error('Unauthorized to remove collaborator');
+    }
+
     const room = await liveblocks.getRoom(roomId)
+    const access = room.usersAccesses[currentEmail] ?? [];
+
+    if (!access.includes('room:write')) {
+      throw new Error('Insufficient permissions to remove collaborator');
+    }
 
     if(room.metadata.email === email) {
       throw new Error('You cannot remove yourself from the document');
@@ -134,6 +200,19 @@ export const removeCollaborator = async ({ roomId, email }: {roomId: string, ema
 
 export const deleteDocument = async (roomId: string) => {
   try {
+    const currentEmail = await getCurrentUserEmail();
+
+    if (!currentEmail) {
+      throw new Error('Unauthorized to delete document');
+    }
+
+    const room = await liveblocks.getRoom(roomId);
+    const access = room.usersAccesses[currentEmail] ?? [];
+
+    if (!access.includes('room:write')) {
+      throw new Error('Insufficient permissions to delete document');
+    }
+
     await liveblocks.deleteRoom(roomId);
     revalidatePath('/');
     redirect('/');

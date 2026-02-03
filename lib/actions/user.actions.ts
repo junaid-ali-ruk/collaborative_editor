@@ -1,11 +1,27 @@
 'use server';
 
-import { clerkClient } from "@clerk/nextjs/server";
+import { clerkClient, currentUser } from "@clerk/nextjs/server";
 import { parseStringify } from "../utils";
 import { liveblocks } from "../liveblocks";
 
+const getCurrentUserEmail = async () => {
+  const clerkUser = await currentUser();
+
+  if (!clerkUser) {
+    return null;
+  }
+
+  return clerkUser.emailAddresses[0]?.emailAddress ?? null;
+};
+
 export const getClerkUsers = async ({ userIds }: { userIds: string[]}) => {
   try {
+    const currentEmail = await getCurrentUserEmail();
+
+    if (!currentEmail) {
+      throw new Error('Unauthorized to list users');
+    }
+
     const { data } = await clerkClient.users.getUserList({
       emailAddress: userIds,
     });
@@ -27,6 +43,12 @@ export const getClerkUsers = async ({ userIds }: { userIds: string[]}) => {
 
 export const getDocumentUsers = async ({ roomId, currentUser, text }: { roomId: string, currentUser: string, text: string }) => {
   try {
+    const currentEmail = await getCurrentUserEmail();
+
+    if (!currentEmail || currentEmail !== currentUser) {
+      throw new Error('Unauthorized to list document users');
+    }
+
     const room = await liveblocks.getRoom(roomId);
 
     const users = Object.keys(room.usersAccesses).filter((email) => email !== currentUser);
